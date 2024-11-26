@@ -424,6 +424,7 @@ void calculateNearestsWithGridMethod(
 }
 
 int main () {
+    omp_set_num_threads(10);
     cout << fixed << setprecision(10); // print doubles with 10 decimal places
     
     int n = 100000;
