@@ -507,31 +507,31 @@ int main() {
     utils::easyio::readCsv("100000 locations.csv", pointsFromCsvFile);
 
     // Test 1: Standard Naive Serial
-    cout << "Standard Naive Serial..." << endl;
-    measureExecutionTime(
-        computeDistancesSequentially,
-        randomGeneratedPoints[0],
-        randomGeneratedPoints[1],
-        calculateEucDistance
-    );
+//    cout << "Standard Naive Serial..." << endl;
+  //  measureExecutionTime(
+  //      computeDistancesSequentially,
+//        randomGeneratedPoints[0],
+ //       randomGeneratedPoints[1],
+ //       calculateEucDistance
+//    );
 
     // Test 2: Wraparound Naive Serial
-    cout << "Wraparound Naive Serial..." << endl;
-    measureExecutionTime(
-        computeDistancesSequentially,
-        randomGeneratedPoints[0],
-        randomGeneratedPoints[1],
-        calculateWraparoundDistances
-    );
+ //   cout << "Wraparound Naive Serial..." << endl;
+ //   measureExecutionTime(
+ //       computeDistancesSequentially,
+ //       randomGeneratedPoints[0],
+ //      randomGeneratedPoints[1],
+ //       calculateWraparoundDistances
+ //   );
 
     // Test 3: Standard Naive Parallel
-    cout << "Standard Naive Parallel..." << endl;
-    measureExecutionTime(
-        computeDistancesWithParallelization,
-        randomGeneratedPoints[0],
-        randomGeneratedPoints[1],
-        calculateEucDistance
-    );
+  //  cout << "Standard Naive Parallel..." << endl;
+    //measureExecutionTime(
+      //  computeDistancesWithParallelization,
+ //       //randomGeneratedPoints[0],
+   //     randomGeneratedPoints[1],
+ //       calculateEucDistance
+   // );
 
     // Test 4: Wraparound Naive Parallel
     cout << "Wraparound Naive Parallel..." << endl;
