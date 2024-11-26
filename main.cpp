@@ -4,229 +4,310 @@
 #include <chrono>
 #include <utility>
 #include <omp.h>
-#include <iomanip> // Required for setprecision
-
-
+#include <iomanip> 
 #include "easyio.h"
 #include "rng.h"
-#include "grid.h"
 
-// small program, no danger of namespace pollution. Makes code more readable, good to do.
 using namespace std; 
 
-// taken from https://stackoverflow.com/questions/22387586/measuring-execution-time-of-a-function-in-c
-// changed slightly to give result in seconds rather than nanoseconds
-typedef chrono::high_resolution_clock::time_point TimeVar;
-#define duration(a) chrono::duration<double>(a).count()
-#define timeNow() chrono::high_resolution_clock::now()
+// Generates a list of random points (x, y) between 0 and 1
+vector<vector<double>> generateRandomPoints(int totalPoints) {
+    // Define the range for random values
+    double minVal = 0;
+    double maxVal = 1;
 
-template<typename F, typename... Args>
-void funcTime(F func, Args&&... args){
-    TimeVar t1=timeNow();
-    
-    func(std::forward<Args>(args)...);
-    cout << "time taken: " << duration(timeNow()-t1)
-         << "\n\n"; // dbl new line to make results more readable
+    // Create vectors to store x and y coordinates
+    vector<double> xCoords(totalPoints, 0);
+    vector<double> yCoords(totalPoints, 0);
+
+    // Loop to fill x and y with random numbers
+    for (int i = 0; i < totalPoints; i++) {
+        // Generate random numbers for x and y
+        xCoords[i] = minVal + (maxVal - minVal) * ((double)rand() / RAND_MAX);
+        yCoords[i] = minVal + (maxVal - minVal) * ((double)rand() / RAND_MAX);
+    }
+
+    // Combine x and y into a 2D vector and return it
+    vector<vector<double>> randomPoints = {xCoords, yCoords};
+    return randomPoints;
 }
-// end stackoverflow reference
 
-// write extended results to plaintext files, and print titled averages.
-void printResults(
+void measureExecutionTime(void (*func)(vector<double>, vector<double>, void (*)(double, double, double[])),
+                          vector<double> x, vector<double> y, void (*calcFunc)(double, double, double[])) {
+    // Start time
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Call the provided function
+    func(x, y, calcFunc);
+
+    // End time
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // Calculate the duration in seconds
+    auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+
+    // Print the result
+    cout << "Execution time: " << elapsed << " seconds\n";
+}
+
+void outputRes(
     vector<double> &nearests, vector<double> &furthests, double avgNearest, double avgFurthest,
     bool isParallel, bool isWraparoundGeo
 ) {
-    // write whole list to txt files
-    utils::easyio::outputToTxt("basicNearests.txt", nearests);
-    utils::easyio::outputToTxt("basicFurthests.txt", furthests);
+    // Write nearest distances to a file
+    ofstream nearestFile("basicNearests.txt");
+    for (size_t i = 0; i < nearests.size(); ++i) {
+        nearestFile << nearests[i] << endl;
+    }
+    nearestFile.close(); // Close the file manually
 
-    string title = "Calculating in " + string(isParallel ? "parallel " : "serial ") +
-                   "using " + string(isWraparoundGeo ? "wraparound geometry" : "basic geometry");
+    // Write furthest distances to another file
+    ofstream furthestFile("basicFurthests.txt");
+    for (size_t i = 0; i < furthests.size(); ++i) {
+        furthestFile << furthests[i] << endl;
+    }
+    furthestFile.close(); // Close the file manually
 
-    // print averages to stdout
-    cout << title << endl
-         << "mean nearest distance: " << avgNearest << endl
-         << "mean furthest distance: " << avgFurthest << endl;
-}
-
-// Returns 100k randomly initialised points, from 0.0 to 1.0 in the x & y direction. 
-// In the format of {{x_1, x_2, ..., x_n},  {y_1, y_2, ..., x_n}}
-// int n : the number of points to create
-vector<vector<double>> randomPoints(int n) {
-    double start = 0;
-    double end = 1;
-    
-    vector<double> x(n, start);
-    vector<double> y(n, start);
-
-    for (int i = 0; i < n; ++i) {
-        // gen a random x and y coord
-        
-        x[i] = utils::rand::randDouble(start, end);
-        y[i] = utils::rand::randDouble(start, end);
+    // Print the title based on parallel/serial and geometry type
+    cout << "Calculating in ";
+    if (isParallel) {
+        cout << "parallel ";
+    } else {
+        cout << "serial ";
+    }
+    cout << "using ";
+    if (isWraparoundGeo) {
+        cout << "wraparound geometry" << endl;
+    } else {
+        cout << "basic geometry" << endl;
     }
 
-    return vector<vector<double>> {x, y};
+    // Print the averages to the console
+    cout << "Mean nearest distance: " << avgNearest << endl;
+    cout << "Mean furthest distance: " << avgFurthest << endl;
 }
 
-// Calculates the shortest and longest distance, given the x and y distances, between two points.
-// Places the shortest distance in arr[0], the longest distance in arr[1]. 
-// Returns the distances squared. 
-// 
-// arr[0] must have size >= 2.
-// Uses wraparound geometry.
-void wraparoundGeo(double xdiff, double ydiff, double arr[]) {
-    double dy = min(ydiff, 1 - ydiff);
-    double dx = min(xdiff, 1 - xdiff);
-    
-    double closestDist = dy * dy + dx * dx;
+// Function to calculate the squared distance between two points
+// This is used for basic geometry where no wraparound is applied
+void calculateEucDistance(double differenceInX, double differenceInY, double outputArray[]) {
+    // Step 1: Calculate the square of the x difference
+    double squareOfXDifference = differenceInX * differenceInX;
 
-    dy = max(ydiff, 1 - ydiff);
-    dx = max(xdiff, 1 - xdiff);
+    // Step 2: Calculate the square of the y difference
+    double squareOfYDifference = differenceInY * differenceInY;
 
-    double furthestDist = dy * dy + dx * dx;
+    // Step 3: Add the squared differences to find the squared distance
+    double totalSquaredDistance = squareOfXDifference + squareOfYDifference;
 
-    arr[0] = closestDist;
-    arr[1] = furthestDist;
+    // Step 4: Save the result to both positions in the output array
+    outputArray[0] = totalSquaredDistance; // Save to first slot
+    outputArray[1] = totalSquaredDistance; // Save to second slot (same value for both)
 }
 
-// Calculates the Euclidean distance between two points, given the x and y distances between them.
-// The distance is placed in both arr[0] and arr[1]. 
-// Returns the distances squared. 
-// 
-// arr[0] must have size >= 2.
-void basicGeo(double xdiff, double ydiff, double arr[]) {
-    double dist = ydiff * ydiff + xdiff * xdiff;
-    
-    arr[0] = dist;
-    arr[1] = dist;
+
+// Function to calculate the shortest and longest distances with wraparound geometry
+// Wraparound means distances are measured across edges of a toroidal space
+void calculateWraparoundDistances(double differenceInX, double differenceInY, double outputArray[]) {
+    // Variables to hold the shortest and longest distances
+    double smallestDistanceSquared = 0.0;
+    double largestDistanceSquared = 0.0;
+
+    // Step 1: Calculate the "wrapped" difference in Y direction
+    double wrappedYDifference1 = differenceInY; // Original Y difference
+    double wrappedYDifference2 = 1 - differenceInY; // Wraparound Y difference
+    double minimumYDifference = wrappedYDifference1; // Start with original as minimum
+
+    if (wrappedYDifference2 < wrappedYDifference1) {
+        // If wrapped difference is smaller, update the minimum
+        minimumYDifference = wrappedYDifference2;
+    }
+
+    // Step 2: Calculate the "wrapped" difference in X direction
+    double wrappedXDifference1 = differenceInX; // Original X difference
+    double wrappedXDifference2 = 1 - differenceInX; // Wraparound X difference
+    double minimumXDifference = wrappedXDifference1; // Start with original as minimum
+
+    if (wrappedXDifference2 < wrappedXDifference1) {
+        // If wrapped difference is smaller, update the minimum
+        minimumXDifference = wrappedXDifference2;
+    }
+
+    // Step 3: Compute the shortest distance (squared)
+    smallestDistanceSquared = (minimumYDifference * minimumYDifference) +
+                              (minimumXDifference * minimumXDifference);
+
+    // Step 4: Now calculate the "wrapped" difference for the furthest distance
+    double maximumYDifference = wrappedYDifference1; // Start with original as maximum
+    if (wrappedYDifference2 > wrappedYDifference1) {
+        // If wrapped difference is larger, update the maximum
+        maximumYDifference = wrappedYDifference2;
+    }
+
+    double maximumXDifference = wrappedXDifference1; // Start with original as maximum
+    if (wrappedXDifference2 > wrappedXDifference1) {
+        // If wrapped difference is larger, update the maximum
+        maximumXDifference = wrappedXDifference2;
+    }
+
+    // Step 5: Compute the furthest distance (squared)
+    largestDistanceSquared = (maximumYDifference * maximumYDifference) +
+                             (maximumXDifference * maximumXDifference);
+
+    // Step 6: Save results to the output array
+    outputArray[0] = smallestDistanceSquared; // Save shortest distance squared
+    outputArray[1] = largestDistanceSquared;  // Save longest distance squared
 }
 
-// For each given point (x_i, y_i), calculate the distance to the nearest and furthest point.
-// For calcFunc, pass the function that describes the geometry to use. Basic and wraparound are
-// both given in this file.
-// 
-// Nearest points will be written to nearest.txt, furthests to furthest.txt. 
-// Prints to stdout the average nearest and furthest distances.
-// Calculated in serial.
-void calcNearestAndFurthestDistances_Serial(
-    vector<double> x, vector<double> y, void (*calcFunc)(double, double, double[])
+
+
+
+
+
+// For every point, figure out how close and far it is to/from the other points.
+// This is done in a plain straightforward way without parallelization.
+// Outputs results to files and prints the average distances.
+// Works by accepting a geometry calculator function (e.g., for basic or wraparound geometry).
+void computeDistancesSequentially(
+    vector<double> xCoordinates, vector<double> yCoordinates, void (*geometryCalculator)(double, double, double[])
 ) {
-    int n = x.size();
+    // Number of points
+    int totalPoints = xCoordinates.size();
 
-    if (n != y.size()) {
-        throw invalid_argument("x and y must have the same number of elements");
+    // Check if sizes of x and y are equal
+    if (totalPoints != yCoordinates.size()) {
+        throw invalid_argument("The x and y coordinates must have the same number of points.");
     }
-    
-    // setup
-    vector<double> nearests(n, 0);
-    vector<double> furthests(n, 0);
-    
-    // contains {nearest dist, furthest dist}. No need to reinitialise ever, just reuse it.
-    double res[2];
-    
-    // iter through all points
-    for (int i = 0; i < n; ++i) {
-        // calc for each point
-        double runningNearestSquared = 2.1; // arbitrary number > sqrt(2) ** 2 = 2
-        double runningFurthestSquared = -0.1; // arbitrary number < 0
-        
-        for (int j = 0; j < n; ++j) {
-            // calculate euclidean distances in x & y
-            double ydiff = abs(y[j] - y[i]);
-            double xdiff = abs(x[j] - x[i]);
 
-            // pass to calcFunc to compute nearest and furthest distances, basic dependency injection
-            calcFunc(xdiff, ydiff, res);
-            
-            if (res[0] < runningNearestSquared && i != j) {
-                runningNearestSquared = res[0];
+    // Prepare storage for nearest and furthest distances for each point
+    vector<double> smallestDistances(totalPoints, 0);
+    vector<double> largestDistances(totalPoints, 0);
+
+    // Temporary array to hold calculated distances
+    double distanceResults[2];
+
+    // Loop through all the points
+    for (int currentPoint = 0; currentPoint < totalPoints; ++currentPoint) {
+        // Use very large and small numbers to initialize nearest and furthest trackers
+        double nearestSoFarSquared = 99999.9; // Arbitrary large number
+        double furthestSoFarSquared = -99999.9; // Arbitrary small number
+
+        // Compare this point with all other points
+        for (int comparisonPoint = 0; comparisonPoint < totalPoints; ++comparisonPoint) {
+            // Skip the current point itself
+            if (currentPoint == comparisonPoint) continue;
+
+            // Compute differences in x and y
+            double xDifference = abs(xCoordinates[comparisonPoint] - xCoordinates[currentPoint]);
+            double yDifference = abs(yCoordinates[comparisonPoint] - yCoordinates[currentPoint]);
+
+            // Use the geometry calculator to compute distances
+            geometryCalculator(xDifference, yDifference, distanceResults);
+
+            // Check if this distance is the smallest we've seen so far
+            if (distanceResults[0] < nearestSoFarSquared) {
+                nearestSoFarSquared = distanceResults[0];
             }
-            if (res[1] > runningFurthestSquared && i != j) {
-                runningFurthestSquared = res[1];
+
+            // Check if this distance is the largest we've seen so far
+            if (distanceResults[1] > furthestSoFarSquared) {
+                furthestSoFarSquared = distanceResults[1];
             }
         }
 
-        nearests[i] = sqrt(runningNearestSquared);
-        furthests[i] = sqrt(runningFurthestSquared);
+        // Save the results for this point after taking square roots
+        smallestDistances[currentPoint] = sqrt(nearestSoFarSquared);
+        largestDistances[currentPoint] = sqrt(furthestSoFarSquared);
     }
 
-    double nearestMean = 0;
-    double furthestMean = 0;
-    for (int i = 0; i < n; ++i) {
-        nearestMean += nearests[i];
-        furthestMean += furthests[i];
+    // Calculate averages for all nearest and furthest distances
+    double totalNearestDistance = 0;
+    double totalFurthestDistance = 0;
+    for (int i = 0; i < totalPoints; ++i) {
+        totalNearestDistance += smallestDistances[i];
+        totalFurthestDistance += largestDistances[i];
     }
-    double avgNearest = nearestMean / n;
-    double avgFurthest = furthestMean / n;
+    double averageNearest = totalNearestDistance / totalPoints;
+    double averageFurthest = totalFurthestDistance / totalPoints;
 
-    // output results
-    printResults(nearests, furthests, avgNearest, avgFurthest, false, calcFunc == wraparoundGeo);
+    // Output the results
+    outputRes(smallestDistances, largestDistances, averageNearest, averageFurthest, false, geometryCalculator == calculateWraparoundDistances);
 }
-
-// For each given point (x_i, y_i), calculate the distance to the nearest and furthest point.
-// For calcFunc, pass the function that describes the geometry to use. Basic and wraparound are
-// both given in this file.
-// 
-// Nearest points will be written to nearest.txt, furthests to furthest.txt. 
-// Prints to stdout the average nearest and furthest distances.
-// Calculated using parallelisation from OpenMP.
-void calcNearestAndFurthestDistances_Parallel(
-    vector<double> x, vector<double> y, void (*calcFunc)(double, double, double[])
+// Parallel computation of nearest and furthest distances for each point in a set.
+// This function uses OpenMP for parallelization.
+// The "geometryLogicFunction" determines the calculation logic (e.g., basic or wraparound).
+void computeDistancesWithParallelization(
+    vector<double> xCoordinates, vector<double> yCoordinates, void (*geometryLogicFunction)(double, double, double[])
 ) {
-    int n = x.size();
-
-    if (n != y.size()) {
-        throw invalid_argument("x and y must have the same number of elements");
+    // Step 1: Verify that the input vectors have matching sizes
+    int numberOfPoints = xCoordinates.size();
+    if (numberOfPoints != yCoordinates.size()) {
+        throw invalid_argument("The x and y coordinate arrays must have the same number of elements.");
     }
-    
-    // setup
-    vector<double> nearests(n, 0);
-    vector<double> furthests(n, 0);
 
-    // contains {nearest dist, furthest dist}. No need to reinitialise ever, just reuse it.
-    double res[2];
-    
-    // iter through all points
-    #pragma omp parallel for private(res) // make sure that each thread has its own threadbound`res`
-    for (int i = 0; i < n; ++i) {
-        // calc for each point
-        double runningNearestSquared = 2.1; // arbitrary number > sqrt(2) ** 2 = 2
-        double runningFurthestSquared = -0.1; // arbitrary number < 0
+    // Step 2: Prepare storage for results
+    vector<double> nearestDistances(numberOfPoints, 0.0);  // To hold nearest distances
+    vector<double> furthestDistances(numberOfPoints, 0.0); // To hold furthest distances
 
-        for (int j = 0; j < n; ++j) {
-            // calculate euclidean distances in x & y
-            double ydiff = abs(y[j] - y[i]);
-            double xdiff = abs(x[j] - x[i]);
+    // Step 3: Set up a reusable array for results per pair of points
+    double tempResults[2]; // Holds {nearest distance squared, furthest distance squared}
 
-            // pass to calcFunc to compute nearest and furthest distances, basic dependency injection
-            calcFunc(xdiff, ydiff, res);
-            
-            if (res[0] < runningNearestSquared && i != j) {
-                runningNearestSquared = res[0];
+    // Step 4: Loop over all points in parallel
+    #pragma omp parallel for private(tempResults)
+    for (int currentIndex = 0; currentIndex < numberOfPoints; ++currentIndex) {
+        // Initialize running minimum and maximum distances for the current point
+        double smallestSquaredDistance = 2.1; // Arbitrary large enough value
+        double largestSquaredDistance = -0.1; // Arbitrary small enough value
+
+        // Step 4a: Iterate over all other points to calculate distances
+        for (int comparisonIndex = 0; comparisonIndex < numberOfPoints; ++comparisonIndex) {
+            // Skip comparing a point with itself
+            if (currentIndex == comparisonIndex) {
+                continue;
             }
-            if (res[1] > runningFurthestSquared && i != j) {
-                runningFurthestSquared = res[1];
+
+            // Calculate the absolute differences in x and y coordinates
+            double xDifference = abs(xCoordinates[comparisonIndex] - xCoordinates[currentIndex]);
+            double yDifference = abs(yCoordinates[comparisonIndex] - yCoordinates[currentIndex]);
+
+            // Call the geometry logic function to calculate distances
+            geometryLogicFunction(xDifference, yDifference, tempResults);
+
+            // Update the running nearest and furthest distances
+            if (tempResults[0] < smallestSquaredDistance) {
+                smallestSquaredDistance = tempResults[0];
+            }
+            if (tempResults[1] > largestSquaredDistance) {
+                largestSquaredDistance = tempResults[1];
             }
         }
 
-        nearests[i] = sqrt(runningNearestSquared);
-        furthests[i] = sqrt(runningFurthestSquared);
+        // Store the results for the current point
+        nearestDistances[currentIndex] = sqrt(smallestSquaredDistance);
+        furthestDistances[currentIndex] = sqrt(largestSquaredDistance);
     }
 
-    // calculate means
-    double nearestSum = 0;
-    double furthestSum = 0;
-    #pragma omp parallel for reduction(+:nearestSum, furthestSum) // prevent race conditions 
-    for (int i = 0; i < n; ++i) {
-        nearestSum += nearests[i];
-        furthestSum += furthests[i];
-    }
-    
-    double avgNearest = nearestSum / n;
-    double avgFurthest = furthestSum / n;
+    // Step 5: Compute the averages of the nearest and furthest distances
+    double totalNearestSum = 0.0;
+    double totalFurthestSum = 0.0;
 
-    // output results
-    printResults(nearests, furthests, avgNearest, avgFurthest, true, calcFunc == wraparoundGeo);
+    #pragma omp parallel for reduction(+:totalNearestSum, totalFurthestSum)
+    for (int pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex) {
+        totalNearestSum += nearestDistances[pointIndex];
+        totalFurthestSum += furthestDistances[pointIndex];
+    }
+
+    double averageNearestDistance = totalNearestSum / numberOfPoints;
+    double averageFurthestDistance = totalFurthestSum / numberOfPoints;
+
+    // Step 6: Output the results using the provided function
+    outputRes(
+        nearestDistances, 
+        furthestDistances, 
+        averageNearestDistance, 
+        averageFurthestDistance, 
+        true, // Indicates parallel computation
+        geometryLogicFunction == calculateWraparoundDistances // Flag for geometry type
+    );
 }
 
 // For each given point (x_i, y_i), calculate the distance to the nearest and furthest point.
@@ -296,7 +377,7 @@ void calcNearestAndFurthestDistances_Serial_Fast(
     double avgFurthest = furthestMean / n;
 
     // output results
-    printResults(nearests, furthests, avgNearest, avgFurthest, false, calcFunc == wraparoundGeo);
+    outputRes(nearests, furthests, avgNearest, avgFurthest, false, calcFunc == calculateWraparoundDistances);
 }
 
 // For each given point (x_i, y_i), calculate the distance to the nearest and furthest point.
@@ -398,29 +479,7 @@ void calcNearestAndFurthestDistances_Parallel_Fast(
     double avgFurthest = furthestMean / n;
 
     // output results
-    printResults(nearests, furthests, avgNearest, avgFurthest, true, calcFunc == wraparoundGeo);
-}
-
-// Uses the grid method defined in grid.cpp to calculate nearests
-void calculateNearestsWithGridMethod(
-    vector<double> x, vector<double> y
-) {
-    int n = x.size();
-    
-    gridmthd::Grid grid = gridmthd::buildGrid(x, y);
-    pair<vector<double>, vector<double>> res = gridmthd::calculateDistancesWithGrid(grid);
-
-    double nearestMean = 0;
-    double furthestMean = 0;
-    for (int i = 0; i < n; ++i) {
-        nearestMean += res.first[i];
-        furthestMean += res.second[i];
-    }
-
-    double avgNearest = nearestMean / n;
-    double avgFurthest = furthestMean / n;
-
-    cout << "mean nearest: " << avgNearest << " mean furthest: " << avgFurthest << endl;
+    outputRes(nearests, furthests, avgNearest, avgFurthest, true, calcFunc == calculateWraparoundDistances);
 }
 
 int main () {
@@ -429,7 +488,7 @@ int main () {
     
     int n = 100000;
     
-    vector<vector<double>> pointsRandom = randomPoints(n);
+    vector<vector<double>> pointsRandom = generateRandomPoints(n);
 
     vector<vector<double>> pointsCSV;
     utils::easyio::readCsv("100000 locations.csv", pointsCSV);
@@ -438,37 +497,32 @@ int main () {
     
     // // SERIAL
     // // n randomly-initialised points, using basic geometry.
-    //     funcTime(
-      //       calcNearestAndFurthestDistances_Serial, pointsRandom[0], pointsRandom[1], basicGeo
+    //     measureExecutionTime(
+      //       calcNearestAndFurthestDistances_Serial, pointsRandom[0], pointsRandom[1], calculateEucDistance
     //     );
     // // n randomly-initialised points, using wraparound geometry.
-    //     funcTime(
-    //         calcNearestAndFurthestDistances_Serial, pointsRandom[0], pointsRandom[1], wraparoundGeo
+    //     measureExecutionTime(
+    //         calcNearestAndFurthestDistances_Serial, pointsRandom[0], pointsRandom[1], calculateWraparoundDistances
     //     );
     // // n csv-initialised points, using basic geometry.
-    //     funcTime(
-    //         calcNearestAndFurthestDistances_Serial, pointsCSV[0], pointsCSV[1], basicGeo
+    //     measureExecutionTime(
+    //         calcNearestAndFurthestDistances_Serial, pointsCSV[0], pointsCSV[1], calculateEucDistance
     //     );
 
     // // PARALLELISATION
     // // n randomly-initialised points, using basic geometry.        
-         funcTime(
-             calcNearestAndFurthestDistances_Parallel, pointsRandom[0], pointsRandom[1], basicGeo
+         measureExecutionTime(
+             computeDistancesWithParallelization, pointsRandom[0], pointsRandom[1], calculateEucDistance
          );
 
     // // USING FASTER ALGO
-    //     funcTime(
-    //         calcNearestAndFurthestDistances_Serial_Fast, pointsRandom[0], pointsRandom[1], basicGeo
+    //     measureExecutionTime(
+    //         calcNearestAndFurthestDistances_Serial_Fast, pointsRandom[0], pointsRandom[1], calculateEucDistance
     //     );
 
-    //     funcTime(
-    //         calcNearestAndFurthestDistances_Parallel_Fast, pointsRandom[0], pointsRandom[1], basicGeo
+    //     measureExecutionTime(
+    //         calcNearestAndFurthestDistances_Parallel_Fast, pointsRandom[0], pointsRandom[1], calculateEucDistance
     //     );    
     
-    // // USING GRID METHOD
-    //     funcTime(
-    //         calculateNearestsWithGridMethod, pointsRandom[0], pointsRandom[1]
-    //     );
-
     return 0;
 }
