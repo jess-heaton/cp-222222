@@ -534,17 +534,17 @@ int main() {
    // );
 
     // Test 4: Wraparound Naive Parallel
-    cout << "Wraparound Naive Parallel..." << endl;
-    measureExecutionTime(
-        computeDistancesWithParallelization,
-        randomGeneratedPoints[0],
-        randomGeneratedPoints[1],
-        calculateWraparoundDistances
-    );
+   // cout << "Wraparound Naive Parallel..." << endl;
+  //  measureExecutionTime(
+   //     computeDistancesWithParallelization,
+   //     randomGeneratedPoints[0],
+  //      randomGeneratedPoints[1],
+ ///       calculateWraparoundDistances
+ /*   );
 
-    // Test 5: Standard Fast Serial
+    Test 5: Standard Fast Serial
     cout << "Standard Fast Serial..." << endl;
-    measureExecutionTime(
+        measureExecutionTime(
         computeDistancesSequentially_efficient,
         randomGeneratedPoints[0],
         randomGeneratedPoints[1],
@@ -559,7 +559,7 @@ int main() {
         randomGeneratedPoints[1],
         calculateWraparoundDistances
     );
-
+*/
     // Test 7: Standard Fast Parallel
     cout << "Standard Fast Parallel..." << endl;
     measureExecutionTime(
